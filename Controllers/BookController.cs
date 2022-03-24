@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AutoMapper;
+using FluentValidation;
+using FluentValidation.Results;
 using Microsoft.AspNetCore.Mvc;
 using WebApi.BookOperations.CreateBook;
 using WebApi.BookOperations.DeleteBook;
@@ -19,26 +22,31 @@ namespace WebApi.AddControllers
     public class BookController : ControllerBase
     {
         private readonly BookStoreDbContext _context;
-        public BookController (BookStoreDbContext context)
+        private readonly IMapper _mapper;
+        public BookController(BookStoreDbContext context, IMapper mapper)
         {
-            _context=context;
+            _context = context;
+            _mapper = mapper;
         }
 
         [HttpGet]
         public IActionResult GetBooks ()
         {
-            GetBooksQuery query = new GetBooksQuery(_context);
+            GetBooksQuery query = new GetBooksQuery(_context, _mapper);
             var result =query.Handler();
             return Ok(result);
         }
         [HttpGet("{id}")] //FromRoute
         public IActionResult GetById (int id)
         {
+            
             BookDetailViewModel result;
-            GetBookDetailQuery query= new GetBookDetailQuery(_context);
+            GetBookDetailQuery query= new GetBookDetailQuery(_context, _mapper);
             query.bookID=id;
             try
             {
+                GetBookDetailQueryValidation validations = new GetBookDetailQueryValidation();
+                validations.ValidateAndThrow(query);
                 result =query.Handler();
             }
             catch (Exception ex)
@@ -59,10 +67,25 @@ namespace WebApi.AddControllers
         [HttpPost]
         public IActionResult AddBook([FromBody] CreateBookModel newBook)
         {
-            CreateBookCommand command = new CreateBookCommand(_context);
+            CreateBookCommand command = new CreateBookCommand(_context, _mapper); //mapper kullanılacağı için cons metoda eklendi.
             try
             {
                 command.Model= newBook;
+
+                CreateBookCommandValidator validations = new CreateBookCommandValidator();
+                // ValidationResult result = validations.Validate(command);
+                // if (!result.IsValid)
+                // {
+                //     foreach (var item in result.Errors)
+                //     {
+                //         System.Console.WriteLine("Özellik:" +item.PropertyName+ "- Error Message: "+ item.ErrorMessage);
+                //     }
+                // }
+                // else
+                // {
+                //     command.Handler();
+                // } TÜM KODLARI ALTTAKİ KODLA YAPTIK ve son kullanıcı da görebiliyor ;)
+                validations.ValidateAndThrow(command); // hem valide edecek hem de hata bulursa bunu alttaki catch ifadesindeki ex'e atacak ve orada mesaj zaten dönecek.
                 command.Handler();
             }
             catch (Exception ex)
@@ -88,14 +111,16 @@ namespace WebApi.AddControllers
             }
             return Ok();
         }
-        [HttpDelete("{title}")]
-        public IActionResult DeleteBook(string title)
+        [HttpDelete("{id}")]
+        public IActionResult DeleteBook(int id)
         {
             
             try
             {
                 DeleteBookCommand command = new DeleteBookCommand(_context);
-                command.Title=title;
+                command.BookId=id;
+                DeleteBookCommandValidator validations = new DeleteBookCommandValidator();
+                validations.ValidateAndThrow(command);
                 command.Handler();
             }
             catch (Exception ex)
